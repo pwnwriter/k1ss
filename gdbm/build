@@ -1,0 +1,14 @@
+#!/bin/sh -e
+
+./configure \
+    --prefix=/usr \
+    --enable-libgdbm-compat
+
+make
+make DESTDIR="$1" install
+
+# Create symlinks for compatibility.
+mkdir -p "$1/usr/include/gdbm"
+ln -s ../gdbm.h "$1/usr/include/gdbm/gdbm.h"
+ln -s ../ndbm.h "$1/usr/include/gdbm/ndbm.h"
+ln -s ../dbm.h  "$1/usr/include/gdbm/dbm.h"

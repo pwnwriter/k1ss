@@ -1,0 +1,15 @@
+#!/bin/sh -e
+
+mk() {
+    gmake \
+        GOLANG=no \
+        PREFIX=/usr \
+        SBINDIR=/usr/bin \
+        LIBDIR=/usr/lib \
+        PKGCONFIGDIR=/usr/lib/pkgconfig \
+        RAISE_SETFCAP=no \
+        "$@"
+}
+
+mk CC="${CC:-cc}"
+mk DESTDIR="$1" install

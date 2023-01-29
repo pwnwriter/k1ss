@@ -1,0 +1,3 @@
+#!/bin/sh -e
+
+install -Dm755 dummy "$1/usr/bin/dummy"
