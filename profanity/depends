@@ -1,0 +1,17 @@
+cairo
+curl
+freetype-harfbuzz
+gdk-pixbuf
+glib
+gpgme
+gtk+3
+libassuan
+libgcrypt
+libgpg-error
+libsignal-protocol-c
+libstrophe
+ncurses
+pango
+python
+readline
+sqlite

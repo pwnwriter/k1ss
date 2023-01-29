@@ -1,0 +1,11 @@
+#!/bin/sh -e
+git submodule update --init --recursive
+sed 's/bool warn = true/bool warn = false/' \
+    src/main.cpp > _
+mv -f _ src/main.cpp
+
+cmake -B build \
+    -DCMAKE_INSTALL_PREFIX=/usr
+
+cmake --build   build
+cmake --install build

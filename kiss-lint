@@ -1,0 +1,296 @@
+#!/bin/sh
+# Package linter for KISS Linux and derivatives.
+
+# Original by jedahan
+# This version by ehawkvu
+
+# 1 to enable.
+KISS_LINT_AUTOFIX=${KISS_LINT_AUTOFIX:-0}
+
+# 0 to disable.
+KISS_LINT_SHELLCHECK=${KISS_LINT_SHELLCHECK:-1}
+
+# 1 to enable.
+KISS_LINT_WERROR=${KISS_LINT_WERROR:-0}
+
+line_aux() {
+    cut -d':' -f1 | xargs | tr ' ' ','
+}
+checkposix() {
+    # basically search a posix shell script for things that aren't posix
+    (
+        t="$(grep -nE "sed (-[a-zA-Z]*)*-i?[a-zA-Z]*i[a-zA-Z]*i?" "$f" | line_aux)"
+        [ -n "$t" ] && warn "'sed -i' is not portable, use 'sed file > _ ; mv -f _ file' (line(s): $t in $f)"
+    ) &
+
+    t() { grep -v "#" "$f" | grep -nE " ?which " | line_aux ; }
+    ok() { false ; }
+    msg() { warn "'which' is not specified by POSIX, use 'command -v' (lines(s): $(t) in $f)" ; }
+    fix() { sed -E "s/ ?which / command -v /" "$f" > _ ;  mv -f _ "$f" ; }
+    lint_with_fix &
+}
+
+run_autoedit() {
+    ! [ "$KISS_LINT_AUTOFIX" -eq 0 ] && {
+        until [ -e "$FIX_MUTEX" ]; do
+            sleep .01
+        done
+        rm -- "$FIX_MUTEX"
+        $1
+        touch "$FIX_MUTEX"
+    }
+}
+
+lint_with_fix() {
+    if [ -n "$(t)" ]; then
+        if ok; then
+            return
+        else
+            msg
+            run_autoedit fix
+        fi
+    fi
+}
+err() {
+    echo "ERROR: $1"
+}
+warn() {
+    if [ $KISS_LINT_WERROR = 1 ]; then
+        echo "ERROR: $1"
+    else
+        echo "WARNING: $1"
+    fi
+}
+style() {
+    echo "STYLE: $1"
+}
+checkpkg() {
+    FIX_MUTEX="$(mktemp)"
+    for f in $files; do
+        if [ -e "$f" ]; then
+            case "$f" in
+                version)
+                    read -r VER REL < "$f"
+                    [ -z "$VER" ] && err "version is not defined"
+                    [ -z "$REL" ] && err "release is not defined"
+                    ;;
+                depends)
+                    base="(baseinit|baselayout|busybox|bzip2|git|kiss|make|musl|zlib|xz|pigz)"
+                    if grep -qE "^$base" "$f"; then
+                        (
+                            t="$(grep -nE "^$base" "$f" | line_aux)"
+                            t="$(grep -E "^$base" "$f" | cut -d' ' -f1 | tr '\n' ',' | rev | cut -d',' -f2- | rev) is/are implicit deps (line(s): $t in $f)"
+                            warn "$t"
+                        ) &
+                    fi
+
+                    buildtools="(meson|cmake|pkgconf|autoconf|automake)"
+                    if grep -qE "^$buildtools$" "$f"; then
+                        (
+                            t="$(grep -nE "^$buildtools" "$f" | line_aux)"
+                            t="$(grep -E "^$buildtools" "$f" | cut -d' ' -f1 | tr '\n' ',' | rev | cut -d',' -f2- | rev) is/are 'make' deps (line(s): $t in $f)"
+                            warn "$t"
+                        ) &
+                    fi
+
+                    # empty depends file
+                    t() { ! [ -s "$f" ] && echo "a"; }
+                    ok() { [ -s "$f" ] ;  }
+                    msg() { warn "'$f' is empty, can be removed" ; }
+                    fix() { rm -v "$f" ; }
+                    lint_with_fix &
+
+                    t() { ! sort "$f" | diff - "$f" ; }
+                    ok() { false ; }
+                    msg() { echo "STYLE: '$f' is not sorted" ; }
+                    fix() { sort "$f" > _ ; mv -f _ "$f" ; }
+                    lint_with_fix &
+
+                    t() { [ -n "$(cut -d' ' -f1 "$f" | sort | uniq -d)" ] && echo a ; }
+                    ok() { false ; }
+                    msg() { warn "duplicate entries in $f" ; }
+                    fix() { sort -u "$f" > _ ; mv -f _ "$f" ; }
+                    lint_with_fix &
+                    ;;
+                build | post-install | pre-remove)
+                    # check if file is executable
+                    t() { ! [ -x "$f" ] && echo a ; }
+                    ok() { [ -x "$f" ] ; }
+                    msg() { err "'$f' not executable" ; }
+                    fix() { chmod +x "$f" ; }
+                    lint_with_fix &
+
+                    if head -n 1 "$f" | grep -qE "env sh|bin/sh"; then
+                        checkposix
+                        t="$(grep -n "mkdir" "$f" | grep -v -- "-p" | line_aux)"
+                        [ -n "$t" ] && warn "always use '-p' with 'mkdir' (line(s): $t in $f)"
+
+                        head -n 1 "$f" | grep -q "sh -e" || err "'$f' is missing the '-e' flag in the shebang" &
+
+                        (
+                            t="$(grep -nE "^ *# *[a-z]" "$f" | grep -v "shellcheck" | line_aux)"
+                            [ -n "$t" ] && echo "STYLE: '$f' has a comment that starts with a lower case letter (line(s): $t in $f)"
+                        ) &
+
+                        t() { grep -n "kiss l" "$f" | grep -v "kiss list" | line_aux ; }
+                        ok() { false ; }
+                        msg() { warn "use 'kiss list' instead of 'kiss l' (line(s): $(t) in $f)" ; }
+                        fix() { sed "s/kiss l/kiss list/" "$f" > _ ; mv -f _ "$f" ; }
+                        lint_with_fix &
+
+                        t() { grep -n "kiss a " "$f" | grep -v "kiss alternatives" | line_aux ; }
+                        ok() { false ; }
+                        msg() { warn "use 'kiss alternatives' instead of 'kiss a' (line(s): $(t) in $f)" ; }
+                        fix() { sed "s/kiss a /kiss alternatives /g" "$f" > _ ; mv -f _ "$f" ; }
+                        lint_with_fix &
+
+                        (
+                            t=$(grep -nE "^ */usr/bin/.*" "$f" | line_aux)
+                            if [ -n "$t" ]; then
+                                warn "use '\${KISS_ROOT:-/}usr/bin/' instead of '/usr/bin/' (line(s): $t in $f)"
+                            fi
+                        ) &
+                        (
+                            t="$(fold "$f" | diff - "$f" | grep '>' | sed "s/> //" | while read -r l; do grep -n "$l" build; done | line_aux)"
+                            [ -n "$t" ] && echo "STYLE: '$f' has a line(s) that exceed 80 characters (line(s): $t in $f)"
+                        ) &
+
+                        (
+                            # https://stackoverflow.com/questions/1825552/grep-a-tab-in-unix#1825573
+                            if grep -qE "^$(printf '\t')" "$f"; then
+                                # I know this cannot happen.
+                                # shellcheck disable=2094
+                                tr -d '\t' < "$f" | diff - "$f" > /dev/null 2>&1 || echo "STYLE: '$f' is using tabs for indentation, use 4 spaces instead" &
+                            fi
+                        ) &
+                        (
+                            t="$(grep -nE "DESTDIR=\"?..\"?" "$f" | line_aux)"
+                            [ -n "$t" ] && echo "STYLE: 'DESTDIR' is already defined in the environment (line(s): $t in $f)"
+                        ) &
+
+                        t() { grep -nE "pkg-config" "$f" | line_aux ; }
+                        ok() { [ -e depends ] && grep -qE "pkgconf" depends ; }
+                        msg() { warn "'pkg-config' is used, but not in depends (lines(s): $(t) in $f)" ; }
+                        fix() { printf "pkgconf make\n" >> depends ; }
+                        lint_with_fix & # pkgconf check
+
+                        t() { grep -nE "ninja" "$f" | line_aux ; }
+                        ok() { [ -e depends ] && grep -qE "samurai" depends ; }
+                        msg() { warn "'ninja' is used, but not in depends (lines(s): $(t) in $f)" ; }
+                        fix() { printf "samurai make\n" >> depends ; }
+                        lint_with_fix & # ninja check
+
+                        t() { grep -nE "meson" "$f" | line_aux ; }
+                        ok() { [ -e depends ] && grep -qE "meson" depends ; }
+                        msg() { warn "'meson' is used, but not in depends (lines(s): $(t) in $f)" ; }
+                        fix() { printf "meson make\n" >> depends ; }
+                        lint_with_fix & # meson check
+
+                        t() { grep -nE "python" "$f" | line_aux ; }
+                        ok() { [ -e depends ] && grep -q "python" depends ; }
+                        msg() { warn "'python' is used in the build script, but not listed in depends (line(s): $(t) in $f)" ; }
+                        fix() { printf "python\n" >> depends ; }
+                        lint_with_fix & # python check
+
+                        t() { grep -nE "(autoreconf|autogen.sh)" "$f" | line_aux ; }
+                        ok() { [ -e depends ] && grep -qE "autoconf" depends ; }
+                        msg() { warn "'autoreconf/autogen.sh' is used, but 'autoconf' is not in depends (lines(s): $(t) in $f)" ; }
+                        fix() { printf "autoconf make\nautomake make\n" >> depends ; }
+                        lint_with_fix & # autoconf/automake check
+
+                        t() { grep -nE "\"" "$f" | grep -vE -e "\\$" -e '".*[ ]+.*' | line_aux ; }
+                        ok() { ! grep -nE "\"" "$f" | grep -qv "\\$" ; }
+                        msg() { echo "STYLE: unneeded quotes are around text that doesn't contain a variable (lines(s): $(t) in $f)" ; }
+                        fix() { : ; }
+                        lint_with_fix & # useless quote check
+
+                        t() { grep -nE "cmake" "$f" | line_aux ; }
+                        ok() { [ -e depends ] && grep -qE "cmake" depends ; }
+                        msg() { warn "'cmake' is used, but not in depends (lines(s): $(t) in $f)" ; }
+                        fix() { printf "cmake make\n" >> depends ; }
+                        lint_with_fix & # cmake check
+
+                        t() { grep -nE "nproc" "$f" | line_aux ; }
+                        ok() { ! grep -qE "nproc" "$f" ; }
+                        msg() { warn "'nproc' is used, but is not portable across Unices, consider wrapping (lines(s): $(t) in $f)" ; }
+                        fix() { : ; }
+                        lint_with_fix & # cmake check
+
+                        #$PKGMGR list aspell > /dev/null && [ $(grep "#.*" "$f" | grep -vE "(shellcheck|lint)" | aspell list | wc -l) = 0 ] || echo "STYLE: '$f' has spelling mistakes" &
+                        [ "$KISS_LINT_SHELLCHECK" = "1" ] && command -v shellcheck > /dev/null && shellcheck "$f" | grep -vE "(information:$|https:|^$)" &
+                        if command -v shfmt > /dev/null; then
+                            # shfmt: posix, 4 spaces, indent case, keep col alignment paddings, redirect is followed by space
+                            t() { shfmt -p -i 4 -ci -kp -sr "$f" | diff - "$f" | grep '>' ; }
+                            ok() { false ; }
+                            msg() { echo "STYLE: could format script with 'shfmt -p -i 4 -ci -kp -sr $f'" ; }
+                            fix() { shfmt -p -i 4 -ci -kp -sr -w "$f" ; }
+                            lint_with_fix &
+                        fi
+                    fi
+                    ;;
+                sources)
+                    t() { [ -x "$f" ] && echo a ; }
+                    ok() { false ; }
+                    msg() { warn "'$f' is executable" ; }
+                    fix() { chmod -x "$f" ; }
+                    lint_with_fix &
+
+                    [ -n "$VER" ] && {
+
+                        ! [ "$VER" = "git" ] && [ "$KISS" = "1" ] && grep -q "$VER" "$f" && ! [ -e esources ] && echo "STYLE: can replace '$VER' in '$f' with 'VERSION'" &
+
+                        [ -e checksums ] && {
+                            [ "$VER" = "git" ] && [ "$(wc -l < "$f")" = "1" ] && warn "version is '$VER', don't need 'checksums' file" &
+
+                            ! [ "$(grep -cvE "^#|^$|^git\+" "$f")" -eq "$(wc -l < checksums)" ] &&
+                                err "mismatch in the number of line(s) for the '$f' and 'checksums' files" &
+                        }
+                    }
+                    grep -qE "^http:" "$f" && echo "STYLE: '$f' use https sources when possible" &
+
+                    grep -qE "(www\.|\.git)" "$f" && echo "STYLE: '$f' drop 'www.' and '.git' if possible" &
+
+                    grep -qE "^http.*(patch|diff)$" "$f" && echo "STYLE: '$f' avoid remote patches, store them in 'patches/'" &
+
+                    (grep -E "^(files|patches)/" "$f" | cut -d' ' -f1 | while read -r source_f; do
+                        [ -e "$source_f" ] || err "'$source_f' does not exist" &
+                    done) &
+                    ;;
+            esac
+        else
+            case "$f" in
+                version | build | sources) err "'$f' does not exist" ;;
+                meta) warn "'$f' does not exist" ;;
+                checksums)
+                    ! [ "$VER" = "git" ] && [ -e "sources" ] && ! [ "$(wc -l < "sources")" = "1" ] && err "'$f' does not exist" &
+                    ;;
+                *) ;;
+            esac
+        fi
+    done
+    wait
+    [ -e "$FIX_MUTEX" ] && rm -- "$FIX_MUTEX"
+}
+
+PKGMGR=$(basename "$0")
+PKGMGR=${PKGMGR%%-*}
+files="version build sources checksums depends post-install pre-remove"
+case $PKGMGR in
+    kiss) KISS=1 files="$files README" ;; # Kiss has some extra features that cpt doesn't.
+esac
+
+if [ $# -gt 1 ]; then
+    for d in "$@"; do
+        cd "$d" || exit 1
+        printf "\n==> %s <==\n" "$d" # Mimic the output format of `head`.
+        checkpkg
+        cd "$OLDPWD" || exit 1
+    done
+elif [ $# -eq 1 ]; then
+    cd "$1" || exit 1
+    checkpkg
+else
+    checkpkg
+fi
+
+exit 0

@@ -1,0 +1,80 @@
+#!/bin/sh -e
+
+seen_f=$(mktemp)
+
+get_deps() {
+    f="$(kiss search "$1" | sed q)/depends"
+    if [ -e "$f" ]; then
+        cut -d' ' -f1 < "$f"
+    fi
+}
+get_color() {
+    # Determines what the color of a particular dep should be.
+    if test -n "$(kiss search "$1" 2>/dev/null | grep -v installed)"; then
+        if [ -e "${KISS_ROOT:-/}var/db/kiss/installed/$1" ] ; then
+            echo "green"
+        else
+            echo "yellow"
+        fi
+    else
+        if [ -e "${KISS_ROOT:-/}var/db/kiss/installed/$1" ] ; then
+            echo "orange"
+        else
+            echo "red"
+        fi
+    fi
+}
+m() {
+    for d in "$@"; do
+        d_d=$(get_deps "$d")
+        if [ "$color_dep" = 1 ]; then
+            d_color=$(get_color "$d")
+            for dep in $d_d; do
+                echo "$d;$dep;$d_color;$(get_color $dep)"
+            done
+        else
+            echo "$d_d" | tr ' ' '\n' | xargs -I{} echo "$d;{}"
+        fi
+        echo "$@" >> "$seen_f"
+        for j in $d_d; do
+            if grep -q "$j" "$seen_f"; then
+                d_d=$(echo $d_d | sed "s/$j//")
+            fi
+        done
+        m $d_d
+    done
+}
+
+dotgraph() {
+    echo "strict digraph \"$1\"{"
+    if [ "$color_dep" = 1 ]; then
+        m "$1" | sed -E "s/(.*);(.*);(.*);(.*)$/  \"\1\" [ style = filled, fillcolor = \3 ];\n  \"\2\" [ style = filled, fillcolor = \4 ];  \n \"\1\" -> \"\2\";/"
+    else
+        m "$1" | sed -E "s/(.*);(.*)$/  \"\1\" -> \"\2\";/"
+    fi
+    echo "  \"$1\""
+    echo "}"
+    rm -- "$seen_f"
+}
+
+tredc=tred
+if [ $# -gt 1 ]; then
+    for arg in "$@"; do
+        case "$arg" in
+            -notred) tredc=tee;;
+            -color) color_dep=1;;
+            *) pkg="$arg";;
+        esac
+    done
+elif [ $# -eq 1 ]; then
+    pkg="$1"
+else
+    exit 1
+fi
+
+dotgraph "$pkg" |
+if command -v tred 1>/dev/null 2>&1; then
+    $tredc
+else
+    tee
+fi

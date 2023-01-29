@@ -1,0 +1,12 @@
+#!/bin/sh -e
+
+export CFLAGS="$CFLAGS -ffat-lto-objects"
+
+sed 's/-Werror//' Makefile > _
+mv -f _ Makefile
+
+./configure \
+    --prefix=/usr
+
+make SBINDIR=/usr/bin
+make SBINDIR=/usr/bin install

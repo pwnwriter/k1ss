@@ -1,0 +1,7 @@
+#!/bin/sh -e
+export CFLAGS="$CFLAGS -static"
+autoreconf -vif
+./configure \
+    --prefix=/usr
+make
+make install

@@ -1,0 +1,15 @@
+#!/bin/sh -e
+
+export DESTDIR="$1"
+
+sed "s/-Wall/-Wall -static/" Makefile > _
+mv -f _ Makefile
+
+# Intended.
+# shellcheck disable=2068
+mk() {
+    make PREFIX=/usr ROOT="$DESTDIR" MANDIR="$DESTDIR/usr/share/man/man1" $@
+}
+
+mk
+mk install

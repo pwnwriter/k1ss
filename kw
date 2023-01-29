@@ -1,0 +1,85 @@
+#!/bin/sh
+# _K_iss _W_rapper that allows more powerful hooks.
+
+# Why?
+# - Because kiss doesn't make editing build files easy via default hooks.
+#   And since I don't care for forking packages, this is _my_ solution.
+
+# Effectively all kw does is fork a package, allow you to make some edits,
+# then sets KISS_PATH so that the new package is first, then finally cleans up.
+
+# Pretty simple.
+
+# Also, `kw` is safe to alias to kiss, so there's no funny business.
+
+# Example: (enabling rls for rust)
+##!/bin/sh
+#case "$1" in
+#    rust) sed -E -i "s/(\"cargo\")/\"rls\", \1/" "$2/build";;
+#esac
+
+KW_REPO="${KW_REPO:-/tmp/kw}"
+mkdir -p "$KW_REPO"
+KW_HOOK=${KW_HOOK:-} # Maybe have a default hook?
+
+ARGS=$@ # Save args for kiss.
+
+cmd="$(echo "$ARGS" | cut -d' ' -f1)"
+
+same_ver() {
+    repo_dir_v="$(sed 's/ //g' < "$repo_dir/version")"
+    d_dir_v="$(sed 's/ //g' < "$d/version")"
+    [ "$repo_dir_v" = "$d_dir_v" ]
+}
+
+outdatedpkgs() {
+    for d in "${KISS_ROOT:-/}"var/db/kiss/installed/*/ ; do (
+        pkg="$(basename "$d")"
+        repo_dir="$(KISS_HOOK='' kiss search "$pkg" | grep -v "installed" | sed 1q)"
+        if [ -n "$repo_dir" ]; then
+            if ! same_ver ; then
+                echo "$pkg"
+            fi
+        fi
+    ) & done
+    wait
+}
+
+run_hooks_on_pkgs() {
+    [ -n "$pkgs" ] && {
+        for pkg in $pkgs; do
+            cp -Lrf "$(kiss search "$pkg" | sed 1q)" "$KW_REPO"
+            for hook in $(echo "$KW_HOOK" | tr ':' ' '); do
+                "$hook" "$pkg" "$KW_REPO/$pkg"
+            done
+        done
+    }
+}
+
+update_outdated() {
+    pkgs=$(outdatedpkgs)
+    [ -z "$pkgs" ] && exit 1 # Exit if no pkgs need updating.
+    run_hooks_on_pkgs
+    pkgs_no_newline="$(for p in $pkgs; do printf "%s " "$p" ; done | sed 's/ $//')"
+    echo "Update '$pkgs_no_newline'? (Y/N): "
+    read -r ANS
+    if [ "$ANS" = Y ] ; then
+        # shellcheck disable=2086
+        KISS_PATH="$KW_REPO:$KISS_PATH" kiss build $pkgs_no_newline
+    fi
+}
+
+case $cmd in
+    b|build)
+        pkgs="$(echo "$ARGS" | sed "s/$cmd//")"
+        run_hooks_on_pkgs
+        # shellcheck disable=2086
+        KISS_PATH="$KW_REPO:$KISS_PATH" kiss $ARGS
+        ;;
+    U|upgrade) # TODO: Support upgrading packages with KW_HOOKs
+        update_outdated
+        ;;
+    *)  # shellcheck disable=2086
+        kiss $ARGS;; # If we don't know $cmd is, then send it to kiss.
+esac
+rm -rf "${KW_REPO:?Not set, so not removing root.}"/*/

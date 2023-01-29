@@ -1,0 +1,13 @@
+#!/bin/sh -e
+
+meson setup \
+    -Dprefix=/usr \
+    -Dbuildtype=plain \
+    -Ddoc=disabled \
+    -Ddoxygen=disabled \
+    -Dscriptlet-shell=/usr/bin/bash \
+    -Dpkg_config_path=/usr/lib/pkgconfig \
+    output
+
+ninja -C output
+ninja -C output install

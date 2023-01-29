@@ -1,0 +1,10 @@
+glib
+libffi
+linux-headers make
+meson         make
+perl          make
+pixman
+pkgconf       make
+python        make
+samurai       make
+sdl2
