@@ -1,0 +1,9 @@
+#!/bin/sh -e
+
+./autogen.sh
+sed -i '/AX_CXX_COMPILE_STDCXX_17(noext)/d' configure
+./configure \
+    --prefix=/usr
+
+make
+make install

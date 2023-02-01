@@ -1,0 +1,13 @@
+#!/bin/sh -e
+
+#patch -p1 < glvnd.patch
+
+meson \
+    --prefix=/usr \
+    -Dgles1=false \
+    -Dtls=false \
+     . output
+
+ninja -C output
+ninja -C output install
+   # -Dx11=disabled \

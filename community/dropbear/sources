@@ -1,0 +1,4 @@
+https://matt.ucc.asn.au/dropbear/releases/dropbear-version.tar.bz2
+files/dropbear.run
+patches/dropbear-options_sftp-server_path.patch
+https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-8.8p1.tar.gz sftp

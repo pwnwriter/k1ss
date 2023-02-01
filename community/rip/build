@@ -1,0 +1,6 @@
+#!/bin/sh -e
+
+cargo build --release
+
+install -Dm755 target/release/rip "$1/usr/bin/rip"
+ln -s rip                         "$1/usr/bin/rm"

@@ -1,0 +1,5 @@
+#!/bin/sh -e
+
+cargo build --release
+mkdir -p             "$1/usr/bin"
+cp target/release/bb "$1/usr/bin/bb"

@@ -1,0 +1,18 @@
+#!/bin/sh -e
+
+export PREFIX=/usr
+export LIBDIR=lib
+export INCLUDEDIR=include
+export TARGET=visurf
+export NETSURF_HOMEPAGE=https://google.de
+
+rm -rf netsurf
+rm -rf libcss
+mv visurf netsurf
+mv libcss-new libcss
+
+make
+make install
+
+cp -f netsurf/tools/urlfilter "$1/usr/bin/urlfilter"
+chmod +x                      "$1/usr/bin/urlfilter"

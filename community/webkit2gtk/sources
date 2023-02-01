@@ -1,0 +1,4 @@
+https://webkitgtk.org/releases/webkitgtk-VERSION.tar.xz
+patches/2.34.3-non-jumbo-fix.patch
+patches/2.34.3-opengl-without-X-fixes.patch
+patches/0001-Fix-build-without-opengl-or-es.patch?

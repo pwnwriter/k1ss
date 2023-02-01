@@ -1,0 +1,4 @@
+https://libsdl.org/release/SDL2-VERSION.tar.gz
+patches/fix-build-against-wayland-1.20.patch
+patches/gl_version_es_cm_1_0.patch
+patches/patch-src_audio_sndio_SDL_sndioaudio_c

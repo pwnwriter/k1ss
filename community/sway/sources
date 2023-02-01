@@ -1,0 +1,4 @@
+https://github.com/swaywm/sway/archive/VERSION.tar.gz
+https://gitlab.freedesktop.org/wlroots/wlroots/-/archive/0.15.0/wlroots-0.15.0.tar.gz subprojects/wlroots
+#patches/sway-static.patch
+patches/no-evdev.patch

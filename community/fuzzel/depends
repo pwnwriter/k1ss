@@ -1,0 +1,8 @@
+libpng
+libxkbcommon
+meson   make
+pixman
+pkgconf make
+scdoc make
+wayland
+wayland-protocols make

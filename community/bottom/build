@@ -1,0 +1,9 @@
+#!/bin/sh -e
+
+cargo build \
+    --release
+
+install -Dm755 target/release/btm "$1/usr/bin/btm"
+
+# Install the license
+install -Dm755 LICENSE "$1/usr/share/LICENSES/bottom.license"

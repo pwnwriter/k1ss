@@ -1,3 +1,0 @@
-#!/bin/sh -e
-
-kiss search "$1" | xargs -I{} sh -c "printf '%s:' {}; cat {}/version"
